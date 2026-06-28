@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Crypto Price Tracker Dashboard</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+    :root {
+      --bg-deep:    #04070f;
+      --bg-card:    #0a1020;
+      --border:     #1c2e50;
+      --accent:     #3b82f6;
+      --accent-glow:rgba(59,130,246,0.25);
+      --green:      #22c55e;
+      --green-bg:   rgba(34,197,94,0.1);
+      --red:        #ef4444;
+      --red-bg:     rgba(239,68,68,0.1);
+      --gold:       #f59e0b;
+      --text-bright:#f0f6ff;
+      --text-body:  #94a3b8;
+      --text-dim:   #475569;
+      --mono:       'JetBrains Mono', monospace;
+      --sans:       'Space Grotesk', sans-serif;
+      --radius:     12px;
+    }
+
+    *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+    body {
+      font-family: var(--sans);
+      background: var(--bg-deep);
+      color: var(--text-body);
+      min-height: 100vh;
+    }
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: radial-gradient(circle, rgba(59,130,246,0.06) 1px, transparent 1px);
+      background-size: 30px 30px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    header {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(4,7,15,0.95);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 40px; height: 64px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .brand-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), #6366f1);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+    .brand-name { font-size: 1rem; font-weight: 700; color: var(--text-bright); }
+    .brand-sub  { font-family: var(--mono); font-size: 0.65rem; color: var(--text-dim); letter-spacing: 0.1em; }
+    #clock { font-family: var(--mono); font-size: 0.9rem; color: var(--accent); }
+
+    .wrapper {
+      position: relative; z-index: 10;
+      max-width: 1300px; margin: 0 auto;
+      padding: 32px 24px 60px;
+    }
+
+    .page-title { margin-bottom: 28px; }
+    .page-title h1 { font-size: 1.8rem; font-weight: 700; color: var(--text-bright); }
+    .page-title p  { font-size: 0.88rem; color: var(--text-dim); margin-top: 6px; }
+
+    .upload-bar { display: flex; align-items: center; gap: 14px; margin-bottom: 28px; flex-wrap: wrap; }
+    #csv-input  { display: none; }
+    .btn-upload {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 22px;
+      background: transparent; border: 1px solid var(--accent);
+      border-radius: 8px; color: var(--accent);
+      font-family: var(--sans); font-size: 0.85rem; font-weight: 600;
+      cursor: pointer; transition: background 0.2s;
+    }
+    .btn-upload:hover { background: var(--accent-glow); }
+    .upload-info { font-family: var(--mono); font-size: 0.75rem; color: var(--text-dim); }
+    .pill { font-family: var(--mono); font-size: 0.68rem; padding: 3px 10px; border-radius: 20px; border: 1px solid; }
+    .pill.waiting { color: var(--text-dim); border-color: var(--border); }
+    .pill.loaded  { color: var(--green); border-color: var(--green); background: var(--green-bg); }
+
+    .cards {
+      display: grid; grid-template-columns: repeat(4,1fr);
+      gap: 16px; margin-bottom: 28px;
+    }
+    .card {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 22px;
+      position: relative; overflow: hidden;
+      transition: border-color 0.3s, transform 0.2s;
+    }
+    .card:hover { border-color: #2a4a8a; transform: translateY(-2px); }
+    .card::before {
+      content: ''; position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
+    .card-label { font-family: var(--mono); font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 10px; }
+    .card-value { font-family: var(--mono); font-size: 1.9rem; font-weight: 600; color: var(--accent); line-height: 1; }
+    .card-value.green { color: var(--green); }
+    .card-value.red   { color: var(--red); }
+    .card-value.gold  { color: var(--gold); }
+    .card-note  { font-size: 0.72rem; color: var(--text-dim); margin-top: 6px; }
+
+    .section-label {
+      font-family: var(--mono); font-size: 0.68rem;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--text-dim); padding-left: 12px;
+      border-left: 3px solid var(--accent); margin-bottom: 14px;
+    }
+
+    .table-wrap {
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden; margin-bottom: 28px;
+    }
+    .table-top {
+      padding: 16px 22px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .table-top span { font-weight: 600; font-size: 0.88rem; color: var(--text-bright); }
+    #search {
+      background: var(--bg-deep); border: 1px solid var(--border);
+      border-radius: 7px; padding: 7px 14px;
+      color: var(--text-body); font-family: var(--mono);
+      font-size: 0.78rem; outline: none; width: 210px;
+      transition: border-color 0.2s;
+    }
+    #search:focus { border-color: var(--accent); }
+    #search::placeholder { color: var(--text-dim); }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 11px 20px;
+      font-family: var(--mono); font-size: 0.65rem;
+      letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--text-dim); text-align: left;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer; user-select: none;
+    }
+    thead th:hover { color: var(--accent); }
+    tbody tr { border-bottom: 1px solid rgba(28,46,80,0.5); transition: background 0.15s; }
+    tbody tr:hover { background: rgba(59,130,246,0.04); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody td { padding: 13px 20px; font-size: 0.86rem; vertical-align: middle; }
+
+    .td-rank { font-family: var(--mono); font-size: 0.78rem; color: var(--text-dim); }
+    .coin-cell { display: flex; align-items: center; gap: 11px; }
+    .avatar {
+      width: 34px; height: 34px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-family: var(--mono); font-size: 0.68rem; font-weight: 700;
+      color: #000; flex-shrink: 0;
+    }
+    .coin-full  { font-weight: 600; color: var(--text-bright); font-size: 0.88rem; }
+    .coin-short { font-family: var(--mono); font-size: 0.72rem; color: var(--text-dim); }
+    .td-price { font-family: var(--mono); color: var(--text-bright); font-size: 0.9rem; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 6px; font-family: var(--mono); font-size: 0.78rem; }
+    .badge.up   { color: var(--green); background: var(--green-bg); }
+    .badge.down { color: var(--red);   background: var(--red-bg); }
+    .td-mcap { font-family: var(--mono); font-size: 0.78rem; color: var(--text-dim); }
+    .td-time { font-family: var(--mono); font-size: 0.68rem; color: var(--text-dim); }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+    .panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; }
+    .panel-title { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 18px; }
+
+    .bars { display: flex; flex-direction: column; gap: 8px; }
+    .bar-row { display: flex; align-items: center; gap: 10px; }
+    .bar-sym { font-family: var(--mono); font-size: 0.7rem; color: var(--text-body); width: 50px; text-align: right; flex-shrink: 0; }
+    .bar-track { flex: 1; height: 20px; background: rgba(255,255,255,0.03); border-radius: 4px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 4px; display: flex; align-items: center; justify-content: flex-end; padding-right: 7px; transition: width 1.2s ease; }
+    .bar-fill span { font-family: var(--mono); font-size: 0.62rem; color: #000; font-weight: 700; }
+
+    .donut-area { display: flex; align-items: center; justify-content: center; gap: 32px; padding-top: 8px; }
+    #donut { width: 130px; height: 130px; }
+    .donut-key { display: flex; flex-direction: column; gap: 12px; }
+    .key-row { display: flex; align-items: center; gap: 9px; }
+    .key-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .key-label { font-size: 0.8rem; color: var(--text-body); }
+    .key-count { font-family: var(--mono); font-size: 0.78rem; color: var(--text-bright); margin-left: 4px; }
+
+    .gl-item { display: flex; align-items: center; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid rgba(28,46,80,0.4); }
+    .gl-item:last-child { border-bottom: none; }
+    .gl-name { font-size: 0.86rem; font-weight: 600; color: var(--text-bright); }
+    .gl-sym  { font-family: var(--mono); font-size: 0.72rem; color: var(--text-dim); }
+
+    .empty { padding: 56px 20px; text-align: center; }
+    .empty-icon { font-size: 2.8rem; margin-bottom: 14px; }
+    .empty h3 { color: var(--text-bright); font-size: 1rem; margin-bottom: 8px; }
+    .empty p  { font-size: 0.82rem; color: var(--text-dim); }
+    .code-hint {
+      display: inline-block; margin-top: 18px;
+      background: rgba(59,130,246,0.08);
+      border: 1px solid rgba(59,130,246,0.2);
+      border-radius: 8px; padding: 14px 22px; text-align: left;
+    }
+    .code-hint p { font-family: var(--mono); font-size: 0.78rem; color: var(--text-body); margin-bottom: 6px; }
+    .code-hint p:last-child { margin-bottom: 0; }
+    .code-hint code { color: var(--accent); }
+
+    footer { position: relative; z-index: 10; text-align: center; padding: 20px; border-top: 1px solid var(--border); font-family: var(--mono); font-size: 0.7rem; color: var(--text-dim); }
+    footer b { color: var(--accent); font-weight: 400; }
+
+    @media(max-width:900px) {
+      .cards { grid-template-columns: repeat(2,1fr); }
+      .two-col { grid-template-columns: 1fr; }
+      header { padding: 0 20px; }
+    }
+
+    @keyframes fadeUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
+    .fade { animation: fadeUp 0.4s ease both; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-icon">₿</div>
+    <div>
+      <div class="brand-name">CryptoTracker</div>
+      <div class="brand-sub">LIVE PRICE DASHBOARD</div>
+    </div>
+  </div>
+  <div id="clock">--:--:--</div>
+</header>
+
+<div class="wrapper">
+
+  <div class="page-title">
+    <h1>Cryptocurrency Market Overview</h1>
+    <p>Real-time prices scraped from CoinMarketCap · Powered by Python + Selenium</p>
+  </div>
+
+  <div class="upload-bar">
+    <label class="btn-upload" for="csv-input">📂 Load CSV File</label>
+    <input type="file" id="csv-input" accept=".csv" />
+    <span class="upload-info" id="file-name">No file loaded yet</span>
+    <span class="pill waiting" id="status">WAITING</span>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">Total Coins</div>
+      <div class="card-value" id="c-total">—</div>
+      <div class="card-note">in current snapshot</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Highest Price</div>
+      <div class="card-value gold" id="c-price">—</div>
+      <div class="card-note" id="c-price-name">—</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Gainers ↑</div>
+      <div class="card-value green" id="c-gain">—</div>
+      <div class="card-note">coins up in 24h</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Losers ↓</div>
+      <div class="card-value red" id="c-loss">—</div>
+      <div class="card-note">coins down in 24h</div>
+    </div>
+  </div>
+
+  <div class="section-label">Live Coin Data</div>
+  <div class="table-wrap">
+    <div class="table-top">
+      <span>📊 Coin Prices</span>
+      <input id="search" type="text" placeholder="Search name or symbol…" oninput="filterTable()"/>
+    </div>
+    <div id="table-body">
+      <div class="empty">
+        <div class="empty-icon">⏳</div>
+        <h3>No data loaded</h3>
+        <p>Run the Python script first, then load your CSV here.</p>
+        <div class="code-hint">
+          <p>① <code>pip install selenium webdriver-manager pandas</code></p>
+          <p>② <code>python crypto_tracker.py</code></p>
+          <p>③ Click <code>Load CSV File</code> and select <code>crypto_prices.csv</code></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="two-col" id="charts-area" style="display:none">
+    <div class="panel">
+      <div class="panel-title">24h Price Change (%)</div>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Market Sentiment</div>
+      <div class="donut-area">
+        <svg id="donut" viewBox="0 0 130 130"></svg>
+        <div class="donut-key" id="donut-key"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="two-col" id="gl-area" style="display:none">
+    <div class="panel">
+      <div class="panel-title">🏆 Top Gainers</div>
+      <div id="gainers"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">📉 Top Losers</div>
+      <div id="losers"></div>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Cryptocurrency Price Tracker · Built with <b>Python + Selenium</b> · By Swetha
+</footer>
+
+<script>
+  function tick() {
+    document.getElementById('clock').textContent = new Date().toLocaleTimeString('en-GB');
+  }
+  setInterval(tick, 1000); tick();
+
+  let ALL = [];
+
+  document.getElementById('csv-input').addEventListener('change', function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    document.getElementById('file-name').textContent = '📄 ' + file.name;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      ALL = parseCSV(ev.target.result);
+      if (ALL.length) {
+        renderAll(ALL);
+        document.getElementById('status').textContent = 'LOADED';
+        document.getElementById('status').className = 'pill loaded';
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  function parseCSV(text) {
+    const lines = text.trim().split('\n');
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(',').map(h => h.trim().replace(/"/g,''));
+    return lines.slice(1).map(line => {
+      const vals = splitLine(line);
+      const obj = {};
+      headers.forEach((h,i) => obj[h] = (vals[i]||'').trim().replace(/"/g,''));
+      return obj;
+    }).filter(r => r['Name']);
+  }
+
+  function splitLine(line) {
+    const out=[]; let cur=''; let q=false;
+    for (const ch of line) {
+      if (ch==='"') { q=!q; }
+      else if (ch===',' && !q) { out.push(cur); cur=''; }
+      else cur+=ch;
+    }
+    out.push(cur); return out;
+  }
+
+  function numPrice(s)  { return parseFloat((s||'').replace(/[$,]/g,''))||0; }
+  function numChange(s) { return parseFloat((s||'').replace(/[%+]/g,''))||0; }
+
+  function latest(coins) {
+    const map={};
+    coins.forEach(c => map[c['Name']]=c);
+    return Object.values(map);
+  }
+
+  function renderAll(coins) {
+    const snap = latest(coins);
+    renderCards(snap);
+    renderTable(snap);
+    renderBars(snap);
+    renderDonut(snap);
+    renderGL(snap);
+    document.getElementById('charts-area').style.display = 'grid';
+    document.getElementById('gl-area').style.display     = 'grid';
+  }
+
+  function renderCards(snap) {
+    document.getElementById('c-total').textContent = snap.length;
+    const byPrice = [...snap].sort((a,b) => numPrice(b['Price_USD']) - numPrice(a['Price_USD']));
+    document.getElementById('c-price').textContent      = byPrice[0]?.['Price_USD'] || '—';
+    document.getElementById('c-price-name').textContent = byPrice[0]?.['Name']      || '—';
+    const g = snap.filter(c => numChange(c['Change_24h']) > 0).length;
+    document.getElementById('c-gain').textContent = g;
+    document.getElementById('c-loss').textContent = snap.length - g;
+  }
+
+  const COLORS = [
+    ['#3b82f6','#6366f1'],['#f59e0b','#ef4444'],['#22c55e','#06b6d4'],
+    ['#a855f7','#ec4899'],['#14b8a6','#84cc16'],['#f97316','#fb923c'],
+    ['#0ea5e9','#38bdf8'],['#8b5cf6','#c084fc'],['#10b981','#34d399'],
+    ['#f43f5e','#fb7185'],
+  ];
+
+  function renderTable(snap) {
+    const rows = snap.map((c,i) => {
+      const chg = numChange(c['Change_24h']);
+      const cls = chg >= 0 ? 'up' : 'down';
+      const sym = (c['Symbol']||'??').substring(0,3);
+      const [c1,c2] = COLORS[i % COLORS.length];
+      return `<tr class="fade" style="animation-delay:${i*0.03}s">
+        <td class="td-rank">${c['Rank']||i+1}</td>
+        <td>
+          <div class="coin-cell">
+            <div class="avatar" style="background:linear-gradient(135deg,${c1},${c2})">${sym}</div>
+            <div>
+              <div class="coin-full">${c['Name']}</div>
+              <div class="coin-short">${c['Symbol']}</div>
+            </div>
+          </div>
+        </td>
+        <td class="td-price">${c['Price_USD']||'—'}</td>
+        <td><span class="badge ${cls}">${chg>=0?'▲':'▼'} ${c['Change_24h']}</span></td>
+        <td class="td-mcap">${c['Market_Cap']||'—'}</td>
+        <td class="td-time">${(c['Timestamp']||'').substring(0,16)}</td>
+      </tr>`;
+    }).join('');
+
+    document.getElementById('table-body').innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th onclick="sort(0)">#</th>
+            <th onclick="sort(1)">Coin</th>
+            <th onclick="sort(2)">Price</th>
+            <th onclick="sort(3)">24h Change</th>
+            <th onclick="sort(4)">Market Cap</th>
+            <th>Timestamp</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">${rows}</tbody>
+      </table>`;
+  }
+
+  function filterTable() {
+    const q = document.getElementById('search').value.toLowerCase();
+    document.querySelectorAll('#tbody tr').forEach(tr => {
+      tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+    });
+  }
+
+  const _dir={};
+  function sort(col) {
+    _dir[col]=!_dir[col];
+    const tb=document.getElementById('tbody');
+    if (!tb) return;
+    const rows=[...tb.querySelectorAll('tr')];
+    rows.sort((a,b)=>{
+      const av=a.cells[col]?.textContent.trim()||'';
+      const bv=b.cells[col]?.textContent.trim()||'';
+      const an=parseFloat(av.replace(/[^0-9.-]/g,''));
+      const bn=parseFloat(bv.replace(/[^0-9.-]/g,''));
+      const c=isNaN(an)||isNaN(bn) ? av.localeCompare(bv) : an-bn;
+      return _dir[col] ? c : -c;
+    });
+    rows.forEach(r=>tb.appendChild(r));
+  }
+
+  function renderBars(snap) {
+    const sorted = [...snap].sort((a,b) => numChange(b['Change_24h']) - numChange(a['Change_24h']));
+    const top    = sorted.slice(0,8);
+    const maxAbs = Math.max(...top.map(c => Math.abs(numChange(c['Change_24h']))),1);
+    document.getElementById('bars').innerHTML = top.map(c => {
+      const v   = numChange(c['Change_24h']);
+      const pct = Math.abs(v)/maxAbs*100;
+      const col = v>=0 ? 'var(--green)' : 'var(--red)';
+      const lbl = (c['Symbol']||'?').substring(0,5);
+      const txt = (v>=0?'+':'')+v.toFixed(2)+'%';
+      return `<div class="bar-row">
+        <div class="bar-sym">${lbl}</div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:0%;background:${col}" data-w="${pct}">
+            <span>${txt}</span>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    requestAnimationFrame(()=>{
+      document.querySelectorAll('.bar-fill').forEach(el=>{
+        el.style.width=el.dataset.w+'%';
+      });
+    });
+  }
+
+  function renderDonut(snap) {
+    const g=snap.filter(c=>numChange(c['Change_24h'])>=0).length;
+    const l=snap.length-g;
+    const n=snap.length||1;
+    const R=48,cx=65,cy=65,sw=18,circ=2*Math.PI*R;
+    const gArc=g/n*circ, lArc=l/n*circ, off=circ*0.25;
+    document.getElementById('donut').innerHTML=`
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="${sw}"/>
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="var(--green)" stroke-width="${sw}"
+        stroke-dasharray="${gArc} ${circ-gArc}" stroke-dashoffset="${off}" stroke-linecap="round"/>
+      <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="var(--red)" stroke-width="${sw}"
+        stroke-dasharray="${lArc} ${circ-lArc}" stroke-dashoffset="${off-gArc}" stroke-linecap="round"/>
+      <text x="${cx}" y="${cy+2}" text-anchor="middle" fill="var(--text-bright)"
+            font-size="20" font-family="JetBrains Mono,monospace" dominant-baseline="middle">${n}</text>
+      <text x="${cx}" y="${cy+18}" text-anchor="middle" fill="var(--text-dim)"
+            font-size="8" font-family="JetBrains Mono,monospace">COINS</text>`;
+    document.getElementById('donut-key').innerHTML=`
+      <div class="key-row"><div class="key-dot" style="background:var(--green)"></div>
+        <span class="key-label">Gaining</span><span class="key-count">${g}</span></div>
+      <div class="key-row"><div class="key-dot" style="background:var(--red)"></div>
+        <span class="key-label">Losing</span><span class="key-count">${l}</span></div>
+      <div class="key-row"><div class="key-dot" style="background:var(--text-dim)"></div>
+        <span class="key-label">Total</span><span class="key-count">${n}</span></div>`;
+  }
+
+  function renderGL(snap) {
+    const sorted  = [...snap].sort((a,b)=>numChange(b['Change_24h'])-numChange(a['Change_24h']));
+    const gainers = sorted.slice(0,5);
+    const losers  = sorted.slice(-5).reverse();
+    const item=(c,cls)=>`
+      <div class="gl-item">
+        <div>
+          <div class="gl-name">${c['Name']}</div>
+          <div class="gl-sym">${c['Symbol']} · ${c['Price_USD']}</div>
+        </div>
+        <span class="badge ${cls}">${c['Change_24h']}</span>
+      </div>`;
+    document.getElementById('gainers').innerHTML=gainers.map(c=>item(c,'up')).join('');
+    document.getElementById('losers').innerHTML =losers.map(c=>item(c,'down')).join('');
+  }
+</script>
+</body>
+</html>
